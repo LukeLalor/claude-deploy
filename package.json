@@ -1,7 +1,7 @@
 {
   "name": "claude-deploy",
   "description": "Deploy managed Claude agents from version control",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "Luke Lalor",
   "type": "module",
   "private": true,
