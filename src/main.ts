@@ -16,7 +16,7 @@ function buildHeaders(apiKey: string): Record<string, string> {
 
 export async function run(): Promise<void> {
   try {
-    const agentId = core.getInput('agent_id', { required: true })
+    const agentIdInput = core.getInput('agent_id')
     const configFile = core.getInput('config_file', { required: true })
     const apiKey = core.getInput('anthropic_api_key', { required: true })
 
@@ -29,6 +29,23 @@ export async function run(): Promise<void> {
     const agentConfig = yaml.load(fileContent) as Record<string, unknown>
     if (!agentConfig || typeof agentConfig !== 'object') {
       throw new Error(`Invalid or empty YAML in ${configFile}`)
+    }
+
+    const configId =
+      typeof agentConfig.id === 'string' ? agentConfig.id : undefined
+
+    if (agentIdInput && configId && agentIdInput !== configId) {
+      throw new Error(
+        `agent_id input (${agentIdInput}) does not match id in ${configFile} (${configId}). ` +
+          `Remove one of them or make them match.`
+      )
+    }
+
+    const agentId = agentIdInput || configId
+    if (!agentId) {
+      throw new Error(
+        `No agent ID provided. Set the agent_id input or add an id field to ${configFile}.`
+      )
     }
 
     const headers = buildHeaders(apiKey)
@@ -56,8 +73,10 @@ export async function run(): Promise<void> {
       core.info(`Current agent version: ${version}`)
     }
 
-    // Build update body: config + resolved version (overrides any version in config)
-    const updateBody = { ...agentConfig, version }
+    // Build update body: config + resolved version (overrides any version in
+    // config). The agent ID is part of the URL, so drop it from the body.
+    const updateBody: Record<string, unknown> = { ...agentConfig, version }
+    delete updateBody.id
 
     // POST to update the agent
     core.info(`Updating agent ${agentId}...`)

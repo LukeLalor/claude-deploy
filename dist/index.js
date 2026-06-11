@@ -30919,7 +30919,7 @@ function buildHeaders(apiKey) {
 }
 async function run() {
     try {
-        const agentId = getInput('agent_id', { required: true });
+        const agentIdInput = getInput('agent_id');
         const configFile = getInput('config_file', { required: true });
         const apiKey = getInput('anthropic_api_key', { required: true });
         const workspace = process.env.GITHUB_WORKSPACE ?? '.';
@@ -30929,6 +30929,15 @@ async function run() {
         const agentConfig = load(fileContent);
         if (!agentConfig || typeof agentConfig !== 'object') {
             throw new Error(`Invalid or empty YAML in ${configFile}`);
+        }
+        const configId = typeof agentConfig.id === 'string' ? agentConfig.id : undefined;
+        if (agentIdInput && configId && agentIdInput !== configId) {
+            throw new Error(`agent_id input (${agentIdInput}) does not match id in ${configFile} (${configId}). ` +
+                `Remove one of them or make them match.`);
+        }
+        const agentId = agentIdInput || configId;
+        if (!agentId) {
+            throw new Error(`No agent ID provided. Set the agent_id input or add an id field to ${configFile}.`);
         }
         const headers = buildHeaders(apiKey);
         const agentUrl = `${ANTHROPIC_API_BASE}/agents/${agentId}`;
@@ -30949,8 +30958,10 @@ async function run() {
             version = currentAgent.version;
             info(`Current agent version: ${version}`);
         }
-        // Build update body: config + resolved version (overrides any version in config)
+        // Build update body: config + resolved version (overrides any version in
+        // config). The agent ID is part of the URL, so drop it from the body.
         const updateBody = { ...agentConfig, version };
+        delete updateBody.id;
         // POST to update the agent
         info(`Updating agent ${agentId}...`);
         const postResponse = await fetch(agentUrl, {

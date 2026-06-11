@@ -10,8 +10,10 @@ branding:
 
 inputs:
   agent_id:
-    description: The ID of the Claude agent to update
-    required: true
+    description: >-
+      The ID of the Claude agent to update. Optional if the config file contains
+      an id field.
+    required: false
   config_file:
     description: >-
       Path to the YAML configuration file for the agent (relative to the

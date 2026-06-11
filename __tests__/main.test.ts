@@ -24,6 +24,20 @@ model: claude-opus-4-6
 version: 3
 `
 
+const AGENT_YAML_WITH_ID = `
+id: agent_from_config
+name: My Test Agent
+description: A test agent
+model: claude-opus-4-6
+`
+
+const AGENT_YAML_WITH_MATCHING_ID = `
+id: agent_abc123
+name: My Test Agent
+description: A test agent
+model: claude-opus-4-6
+`
+
 const mockFetch = jest.fn<typeof fetch>()
 
 describe('main.ts', () => {
@@ -173,6 +187,78 @@ describe('main.ts', () => {
 
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining('Failed to update agent agent_abc123')
+    )
+  })
+
+  it('uses the id from the config file when agent_id input is omitted', async () => {
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case 'config_file':
+          return 'agent.yml'
+        case 'anthropic_api_key':
+          return 'sk-ant-test'
+        default:
+          return ''
+      }
+    })
+    mockReadFileSync.mockReturnValue(AGENT_YAML_WITH_ID)
+
+    await run()
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://api.anthropic.com/v1/agents/agent_from_config',
+      expect.objectContaining({ method: 'GET' })
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://api.anthropic.com/v1/agents/agent_from_config',
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('does not send the config id in the update body', async () => {
+    mockReadFileSync.mockReturnValue(AGENT_YAML_WITH_MATCHING_ID)
+
+    await run()
+
+    const postBody = JSON.parse(
+      (mockFetch.mock.calls[1][1] as RequestInit).body as string
+    )
+    expect(postBody.id).toBeUndefined()
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('fails when neither agent_id input nor config id is provided', async () => {
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case 'config_file':
+          return 'agent.yml'
+        case 'anthropic_api_key':
+          return 'sk-ant-test'
+        default:
+          return ''
+      }
+    })
+    mockReadFileSync.mockReturnValue(AGENT_YAML)
+
+    await run()
+
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('No agent ID provided')
+    )
+  })
+
+  it('fails when agent_id input conflicts with the config id', async () => {
+    mockReadFileSync.mockReturnValue(AGENT_YAML_WITH_ID)
+
+    await run()
+
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('does not match id')
     )
   })
 

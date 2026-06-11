@@ -34,7 +34,6 @@ jobs:
         id: deploy
         uses: LukeLalor/claude-deploy@v1
         with:
-          agent_id: ${{ vars.AGENT_ID }}
           config_file: agents/my-agent.yml
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -44,6 +43,7 @@ jobs:
 ### agents/my-agent.yml
 
 ```yaml
+id: agent_abc123
 name: My Agent
 description: Does something useful
 model:
@@ -51,6 +51,10 @@ model:
   speed: standard
 system: You are a helpful assistant.
 ```
+
+The agent to update is identified by the `id` field in the config file.
+Alternatively, omit `id` and pass the `agent_id` input instead (e.g.
+`agent_id: ${{ vars.AGENT_ID }}`). If both are set they must match.
 
 To bootstrap your config file from an existing agent:
 
@@ -60,11 +64,11 @@ curl -s https://api.anthropic.com/v1/agents/$AGENT_ID -H 'anthropic-version: 202
 
 ## Inputs
 
-| Input               | Required | Description                                                      |
-| ------------------- | -------- | ---------------------------------------------------------------- |
-| `agent_id`          | Yes      | The ID of the Claude agent to update                             |
-| `config_file`       | Yes      | Path to the agent YAML config file (relative to repository root) |
-| `anthropic_api_key` | Yes      | Anthropic API key with permission to manage agents               |
+| Input               | Required | Description                                                            |
+| ------------------- | -------- | ---------------------------------------------------------------------- |
+| `agent_id`          | No       | The ID of the agent to update. Optional if the config file has an `id` |
+| `config_file`       | Yes      | Path to the agent YAML config file (relative to repository root)       |
+| `anthropic_api_key` | Yes      | Anthropic API key with permission to manage agents                     |
 
 ## Outputs
 
