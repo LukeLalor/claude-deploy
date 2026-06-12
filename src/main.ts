@@ -19,6 +19,7 @@ export async function run(): Promise<void> {
     const agentIdInput = core.getInput('agent_id')
     const configFile = core.getInput('config_file', { required: true })
     const apiKey = core.getInput('anthropic_api_key', { required: true })
+    const allowCreation = core.getBooleanInput('allow_creation')
 
     const workspace = process.env.GITHUB_WORKSPACE ?? '.'
     const filePath = path.resolve(workspace, configFile)
@@ -41,14 +42,51 @@ export async function run(): Promise<void> {
       )
     }
 
+    const headers = buildHeaders(apiKey)
+
     const agentId = agentIdInput || configId
     if (!agentId) {
-      throw new Error(
-        `No agent ID provided. Set the agent_id input or add an id field to ${configFile}.`
+      if (!allowCreation) {
+        throw new Error(
+          `No agent ID provided. Set the agent_id input, add an id field to ${configFile}, ` +
+            `or set allow_creation to create a new agent.`
+        )
+      }
+
+      core.info('No agent ID provided. Creating a new agent...')
+      const createBody: Record<string, unknown> = { ...agentConfig }
+      if ('version' in createBody) {
+        core.warning('Ignoring version field in config when creating an agent')
+        delete createBody.version
+      }
+
+      const createResponse = await fetch(`${ANTHROPIC_API_BASE}/agents`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(createBody)
+      })
+
+      if (!createResponse.ok) {
+        const body = await createResponse.text()
+        throw new Error(
+          `Failed to create agent: ${createResponse.status} ${createResponse.statusText}\n${body}`
+        )
+      }
+
+      const createdAgent = (await createResponse.json()) as Record<
+        string,
+        unknown
+      >
+      const createdId = createdAgent.id as string
+      const createdVersion = createdAgent.version as number
+      core.info(
+        `Agent ${createdId} created successfully. Version: ${createdVersion}`
       )
+      core.setOutput('agent_id', createdId)
+      core.setOutput('version', String(createdVersion))
+      return
     }
 
-    const headers = buildHeaders(apiKey)
     const agentUrl = `${ANTHROPIC_API_BASE}/agents/${agentId}`
 
     let version: number
@@ -98,6 +136,7 @@ export async function run(): Promise<void> {
     core.info(
       `Agent ${agentId} updated successfully. New version: ${newVersion}`
     )
+    core.setOutput('agent_id', agentId)
     core.setOutput('version', String(newVersion))
   } catch (error) {
     if (error instanceof Error) core.setFailed(error.message)

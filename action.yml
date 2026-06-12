@@ -22,8 +22,16 @@ inputs:
   anthropic_api_key:
     description: Anthropic API key with permission to manage agents
     required: true
+  allow_creation:
+    description: >-
+      If true, create a new agent when no agent ID is provided via the agent_id
+      input or the config file's id field
+    required: false
+    default: 'false'
 
 outputs:
+  agent_id:
+    description: The ID of the agent that was created or updated
   version:
     description: The version of the agent after the update
 

@@ -44,6 +44,8 @@ describe('main.ts', () => {
   beforeEach(() => {
     global.fetch = mockFetch
 
+    core.getBooleanInput.mockReturnValue(false)
+
     core.getInput.mockImplementation((name: string) => {
       switch (name) {
         case 'agent_id':
@@ -228,6 +230,106 @@ describe('main.ts', () => {
     )
     expect(postBody.id).toBeUndefined()
     expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('sets the agent_id output when updating', async () => {
+    await run()
+
+    expect(core.setOutput).toHaveBeenCalledWith('agent_id', 'agent_abc123')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('creates a new agent when no ID is provided and allow_creation is true', async () => {
+    core.getBooleanInput.mockReturnValue(true)
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case 'config_file':
+          return 'agent.yml'
+        case 'anthropic_api_key':
+          return 'sk-ant-test'
+        default:
+          return ''
+      }
+    })
+    mockReadFileSync.mockReturnValue(AGENT_YAML)
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'agent_new456',
+        version: 1,
+        name: 'My Test Agent'
+      })
+    } as Response)
+
+    await run()
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.anthropic.com/v1/agents',
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(core.setOutput).toHaveBeenCalledWith('agent_id', 'agent_new456')
+    expect(core.setOutput).toHaveBeenCalledWith('version', '1')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('strips the version field and warns when creating an agent', async () => {
+    core.getBooleanInput.mockReturnValue(true)
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case 'config_file':
+          return 'agent.yml'
+        case 'anthropic_api_key':
+          return 'sk-ant-test'
+        default:
+          return ''
+      }
+    })
+    mockReadFileSync.mockReturnValue(AGENT_YAML_WITH_VERSION)
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'agent_new456', version: 1 })
+    } as Response)
+
+    await run()
+
+    const createBody = JSON.parse(
+      (mockFetch.mock.calls[0][1] as RequestInit).body as string
+    )
+    expect(createBody.version).toBeUndefined()
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('version')
+    )
+  })
+
+  it('fails when agent creation returns a non-OK status', async () => {
+    core.getBooleanInput.mockReturnValue(true)
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case 'config_file':
+          return 'agent.yml'
+        case 'anthropic_api_key':
+          return 'sk-ant-test'
+        default:
+          return ''
+      }
+    })
+    mockReadFileSync.mockReturnValue(AGENT_YAML)
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: async () => '{"error":{"message":"Invalid config"}}'
+    } as Response)
+
+    await run()
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to create agent')
+    )
   })
 
   it('fails when neither agent_id input nor config id is provided', async () => {
